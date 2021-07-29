@@ -2,17 +2,18 @@ from numpy import array
 from pickle import load
 from keras.preprocessing.text import Tokenizer
 from keras.preprocessing.sequence import pad_sequences
-from keras.utils import to_categorical
-from keras.utils import plot_model
+from keras.utils.np_utils import to_categorical
+import keras.utils
 from keras.models import Model
 from keras.layers import Input, Dense, LSTM, Embedding, Dropout
 from keras.layers.merge import add
 from nltk.translate.bleu_score import corpus_bleu
 from numpy import argmax
 from keras.applications.vgg16 import VGG16
+#from tensorflow.keras.applications import EfficientNetB0
 from keras.preprocessing.image import load_img, img_to_array
 from keras.applications.vgg16 import preprocess_input
-
+import numpy as np
 
 # Load document
 def load_doc(filename):
@@ -134,7 +135,7 @@ def create_sequences(tokenizer, max_length, descriptions, photos, vocab_size):
 # Define Model
 def define_model(vocab_size, max_length):
     # Feature Extractor
-    inputs1 = Input(shape=(4096,))
+    inputs1 = Input(shape=(1280,)) #1792
     fe1 = Dropout(0.5)(inputs1)
     fe2 = Dense(256, activation='relu')(fe1)
 
@@ -156,7 +157,7 @@ def define_model(vocab_size, max_length):
 
     # summarize model
     print(model.summary())
-    plot_model(model, to_file='model.png', show_shapes=True)
+    #plot_model(model, to_file='model1.png', show_shapes=True)
     return model
 
 
@@ -224,6 +225,7 @@ def evaluate_model(model, descriptions, photos, tokenizer, max_length):
     print('BLEU-4: %f' % corpus_bleu(actual, predicted, weights=(0.25, 0.25, 0.25, 0.25)))
 
 
+
 # Load Training Set
 def load_training_set():
     print('\nLoading Train Set\n')
@@ -283,12 +285,13 @@ def load_test_set(vocab_size, max_length, tokenizer):
 
 # Extract photo feature
 def extract_features(filename):
-    model = VGG16()
+    model = keras.models.EfficientNetB0()
     model.layers.pop()
-    model = Model(inputs=model.inputs, outputs=model.layers[-1].output)
+    model = Model(inputs=model.inputs, outputs=model.layers[-1].output) #FC layer 4096
 
+    print(model.summary())
     # Load photo
-    image = load_img(filename, target_size=(224, 224))
+    image = load_img(filename, target_size=(380, 380))
     image = img_to_array(image)
     image = image.reshape((1, image.shape[0], image.shape[1], image.shape[2]))
     image = preprocess_input(image)
@@ -307,6 +310,52 @@ def init_data_load():
 
     return X1train, X2train, ytrain, vocab_size, max_length, tokenizer,\
            X1test, X2test, ytest, test_descriptions, test_features
+
+
+# generate a description for an image
+def generate_desc_interpreter(interpreter, tokenizer, photo, maxlength, inp_ind, out_ind):
+    in_text = 'startseq'
+    for i in range(maxlength):
+        sequence = tokenizer.texts_to_sequences([in_text])[0]
+        sequence = pad_sequences([sequence], maxlen=maxlength)
+        photo = photo.astype(np.float32)
+        sequence = sequence.astype(np.float32)
+        interpreter.set_tensor(inp_ind[0], photo)
+        interpreter.set_tensor(inp_ind[1], sequence)
+        interpreter.invoke()
+        output = interpreter.tensor(out_ind)
+        yhat = output()[0]
+        yhat = argmax(yhat)
+        word = word_for_id(yhat, tokenizer)
+        if word is None:
+            break
+        in_text += ' ' + word
+        if word == 'endseq':
+            break
+    return in_text
+
+
+def quant_evaluate_interpreter(interpreter, descriptions, photos, tokenizer, maxlength):
+    actual, predicted = list(), list()
+    input_index = []
+    if interpreter.get_input_details()[0]['shape'][1] == 34:
+        input_index.append(interpreter.get_input_details()[1]["index"])
+        input_index.append(interpreter.get_input_details()[0]["index"])
+    else:
+        input_index.append(interpreter.get_input_details()[0]["index"])
+        input_index.append(interpreter.get_input_details()[1]["index"])
+    output_index = interpreter.get_output_details()[0]["index"]
+
+    for key, desc_list in descriptions.items():
+        yhat = generate_desc_interpreter(interpreter, tokenizer, photos[key], maxlength, input_index, output_index)
+        references = [d.split() for d in desc_list]
+        actual.append(references)
+        predicted.append(yhat.split())
+
+    print('BLEU-1: %f' % corpus_bleu(actual, predicted, weights=(1.0, 0, 0, 0)))
+    print('BLEU-2: %f' % corpus_bleu(actual, predicted, weights=(0.5, 0.5, 0, 0)))
+    print('BLEU-3: %f' % corpus_bleu(actual, predicted, weights=(0.3, 0.3, 0.3, 0)))
+    print('BLEU-4: %f' % corpus_bleu(actual, predicted, weights=(0.25, 0.25, 0.25, 0.25)))
 
 
 if __name__ == "__main__":

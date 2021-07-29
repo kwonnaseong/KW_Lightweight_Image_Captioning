@@ -9,10 +9,10 @@ def predict():
     max_length = 34
 
     # Load model
-    model = load_model('models/model-001.h5')
+    model = load_model('models/model-ep003-loss3.653-val_loss3.890.h5')
 
     # Load & preprocess photo
-    photo = util.extract_features('test/example_001.jpg')
+    photo = util.extract_features('test/lenna.png')
 
     # Generate Description
     description = util.generate_desc(model, tokenizer, photo, max_length)

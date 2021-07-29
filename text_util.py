@@ -1,6 +1,5 @@
 import string
 
-
 # Load the document in memory
 def load_doc(filename):
     file = open(filename, 'r')

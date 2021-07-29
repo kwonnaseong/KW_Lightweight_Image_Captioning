@@ -14,7 +14,7 @@ def main():
     checkpoint = ModelCheckpoint(file_path, monitor='val_loss', verbose=1, save_best_only=True, mode='min')
 
     # Train Model
-    model.fit([X1train, X2train], ytrain, epochs=20, verbose=1, callbacks=[checkpoint],
+    model.fit([X1train, X2train], ytrain, epochs=10, verbose=1, callbacks=[checkpoint],
               validation_data=([X1test, X2test], ytest))
 
 if __name__ == "__main__":
