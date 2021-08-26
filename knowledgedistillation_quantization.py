@@ -6,7 +6,7 @@ from keras.datasets import cifar10
 import tempfile
 import os
 
-IMG_SIZE=32
+IMG_SIZE=224
 EPOCHS=10
 
 class Distiller(keras.Model):
@@ -88,6 +88,7 @@ class Distiller(keras.Model):
 #No pre-trained model
 from tensorflow.keras.applications import EfficientNetB0
 from tensorflow.keras.applications import EfficientNetB7
+from tensorflow.keras.applications import NASNetLarge
 
 teacher = EfficientNetB7(weights=None, input_shape=(IMG_SIZE,IMG_SIZE,3), include_top=True, classes=10) #teacher model
 student = EfficientNetB0(weights=None, input_shape=(IMG_SIZE,IMG_SIZE,3), include_top=True, classes=10) #student model
@@ -99,6 +100,11 @@ student_scratch = keras.models.clone_model(student) #student only model
 batch_size = 64
 (x_train, y_train), (x_test, y_test) = cifar10.load_data()
 
+#resize image
+x_train = tf.image.resize(x_train,[224,224])
+x_train= x_train.numpy()
+x_test = tf.image.resize(x_test, [224,224])
+x_test = x_test.numpy()
 # Normalize data
 x_train = x_train.astype("float32") / 255.0
 x_test = x_test.astype("float32") / 255.0
